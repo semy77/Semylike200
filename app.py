@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-import json, os, aiohttp, asyncio, requests, binascii, random  # 👈 random import kiya
+import json, os, aiohttp, asyncio, requests, binascii, random
 from datetime import datetime
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
@@ -9,7 +9,7 @@ from google.protobuf.message import DecodeError
 
 app = Flask(__name__)
 
-# ✅ Files ke paths
+# ✅ Files ke paths define kiye
 LIKES_TOKENS_FILE = 'token_ind.json'
 VISIT_TOKENS_FILE = 'visit_ind.json'
 
@@ -99,13 +99,13 @@ async def send_request(enc_uid, token):
 async def send_likes(uid, tokens):
     enc_uid = encrypt_message(create_like_proto(uid))
     
-    # 👈 Tokens ki list ko randomly shuffle (mix) kar diya takisab random order me execute ho
+    # Tokens ki list ko randomly mix/shuffle kar diya
     random.shuffle(tokens) 
     
     tasks = [send_request(enc_uid, token) for token in tokens]
     return await asyncio.gather(*tasks)
 
-# ✅ Main Route / Endpoint
+# ✅ Haupt Route / Endpoint
 @app.route('/like', methods=['GET'])
 def like_handler():
     uid = request.args.get("uid")
@@ -123,10 +123,10 @@ def like_handler():
         if not like_tokens:
             return jsonify({"error": "No valid like tokens found in token_ind.json"}), 401
 
-        # 👈 Visit ke liye list me se koi bhi Ek Random Token select karega
+        # Visit ke liye ek random token select kiya
         random_visit_token = random.choice(visit_tokens)
         
-        # Player info check (Random token use ho raha hai)
+        # Player info check
         enc_uid = encrypt_message(create_uid_proto(uid))
         before = make_request(enc_uid, random_visit_token)
         if not before:
@@ -136,11 +136,11 @@ def like_handler():
         likes_before = int(before_data.get("AccountInfo", {}).get("Likes", 0))
         nickname = before_data.get("AccountInfo", {}).get("PlayerNickname", "Unknown")
 
-        # 3️⃣ Asynchronous likes send karne ka process (Shuffled/Random tokens)
+        # 3️⃣ Asynchronous likes send karne ka process
         responses = asyncio.run(send_likes(uid, like_tokens))
         success_count = sum(1 for r in responses if r == 200)
 
-        # Likes ke baad ka data check (Dubara ek random token pick karega safety ke liye)
+        # Likes ke baad ka data check (Dubara ek random token pick kiya)
         random_visit_token_after = random.choice(visit_tokens)
         after = make_request(enc_uid, random_visit_token_after)
         likes_after = likes_before
@@ -148,6 +148,7 @@ def like_handler():
             after_data = json.loads(MessageToJson(after))
             likes_after = int(after_data.get("AccountInfo", {}).get("Likes", 0))
 
+        # ✅ Aapka exact demand kiya hua response block with Developer Credit
         return jsonify({
             "PlayerNickname": nickname,
             "UID": uid,
@@ -156,9 +157,8 @@ def like_handler():
             "LikesGivenByAPI": likes_after - likes_before,
             "SuccessfulRequests": success_count,
             "TotalRequests": len(like_tokens),
-            "status": 1 if likes_after > likes_before else 2
+            "status": 1 if likes_after > likes_before else 2,
             "DEVELOPER TELEGRAM": "@SEMY0HERE"
-            
         })
 
     except Exception as e:
@@ -168,5 +168,7 @@ def like_handler():
 def home():
     return jsonify({"status": "online", "message": "Like API with Random Token Rotation is running! 🔄 ✅"})
 
+# Global context me 'app' accessible hai, jo Vercel ko chahiye.
+# Yeh block sirf local test karne par chalega.
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3000)
