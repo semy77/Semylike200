@@ -9,7 +9,7 @@ from google.protobuf.message import DecodeError
 
 app = Flask(__name__)
 
-# ✅ Files ke paths define kiye
+# ✅ Files ke paths
 LIKES_TOKENS_FILE = 'token_ind.json'
 VISIT_TOKENS_FILE = 'visit_ind.json'
 
@@ -95,17 +95,19 @@ async def send_request(enc_uid, token):
         print(f"Error in send_request: {e}")
         return None
 
-# ✅ Async send likes (Tokens ko randomly shuffle karke use karega)
+# ✅ Async send likes (Sirf 215 random tokens select karega)
 async def send_likes(uid, tokens):
     enc_uid = encrypt_message(create_like_proto(uid))
     
-    # Tokens ki list ko randomly mix/shuffle kar diya
-    random.shuffle(tokens) 
+    # 👈 Agar tokens 215 se zyada hain, toh koi bhi 215 random select karega.
+    # Agar 215 se kam hain, toh saare tokens use karega bina crash hue.
+    target_limit = min(len(tokens), 215)
+    selected_tokens = random.sample(tokens, target_limit)
     
-    tasks = [send_request(enc_uid, token) for token in tokens]
+    tasks = [send_request(enc_uid, token) for token in selected_tokens]
     return await asyncio.gather(*tasks)
 
-# ✅ Haupt Route / Endpoint
+# ✅ Main Route / Endpoint
 @app.route('/like', methods=['GET'])
 def like_handler():
     uid = request.args.get("uid")
@@ -123,10 +125,10 @@ def like_handler():
         if not like_tokens:
             return jsonify({"error": "No valid like tokens found in token_ind.json"}), 401
 
-        # Visit ke liye ek random token select kiya
+        # 👈 Visit ke liye list me se koi bhi Ek Random Token select karega
         random_visit_token = random.choice(visit_tokens)
         
-        # Player info check
+        # Player info check (Random token use ho raha hai)
         enc_uid = encrypt_message(create_uid_proto(uid))
         before = make_request(enc_uid, random_visit_token)
         if not before:
@@ -136,11 +138,11 @@ def like_handler():
         likes_before = int(before_data.get("AccountInfo", {}).get("Likes", 0))
         nickname = before_data.get("AccountInfo", {}).get("PlayerNickname", "Unknown")
 
-        # 3️⃣ Asynchronous likes send karne ka process
+        # 3️⃣ Asynchronous likes send karne ka process (Limited to 215)
         responses = asyncio.run(send_likes(uid, like_tokens))
         success_count = sum(1 for r in responses if r == 200)
 
-        # Likes ke baad ka data check (Dubara ek random token pick kiya)
+        # Likes ke baad ka data check (Dubara ek random token pick karega safety ke liye)
         random_visit_token_after = random.choice(visit_tokens)
         after = make_request(enc_uid, random_visit_token_after)
         likes_after = likes_before
@@ -148,7 +150,6 @@ def like_handler():
             after_data = json.loads(MessageToJson(after))
             likes_after = int(after_data.get("AccountInfo", {}).get("Likes", 0))
 
-        # ✅ Aapka exact demand kiya hua response block with Developer Credit
         return jsonify({
             "PlayerNickname": nickname,
             "UID": uid,
@@ -156,7 +157,7 @@ def like_handler():
             "LikesafterCommand": likes_after,
             "LikesGivenByAPI": likes_after - likes_before,
             "SuccessfulRequests": success_count,
-            "TotalRequests": len(like_tokens),
+            "TotalRequests": min(len(like_tokens), 215),  # 👈 Yahan ab max 215 hi dikhayega
             "status": 1 if likes_after > likes_before else 2,
             "DEVELOPER TELEGRAM": "@SEMY0HERE"
         })
@@ -166,9 +167,7 @@ def like_handler():
 
 @app.route('/')
 def home():
-    return jsonify({"status": "online", "message": "Like API with Random Token Rotation is running! 🔄 ✅"})
+    return jsonify({"status": "online", "message": "Like API with Random 215 Token Limit is running! 🔄 ✅"})
 
-# Global context me 'app' accessible hai, jo Vercel ko chahiye.
-# Yeh block sirf local test karne par chalega.
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3000)
